@@ -9,13 +9,27 @@ build:
 install:
 	go install $(LDFLAGS)
 
+compile:
+	@rm -rf build/
+	@gox $(LDFLAGS) \
+	-os="darwin" \
+	-os="linux" \
+	-os="solaris" \
+	-output "build/{{.Dir}}_$(VERSION)_{{.OS}}_{{.Arch}}/$(NAME)" \
+	./...
+
 deps:
 	go get github.com/c4milo/github-release
+	go get github.com/mitchellh/gox
 
-dist: build
+dist: compile
+	$(eval FILES := $(shell ls build))
 	@rm -rf dist && mkdir dist
-	(cd $(shell pwd)/build && tar -cvzf ../dist/$(NAME)_$(VERSION)_$(PLATFORM)_$(ARCH).tar.gz *); \
-	(cd $(shell pwd)/dist && shasum -a 512 $(NAME)_$(VERSION)_$(PLATFORM)_$(ARCH).tar.gz > $(NAME)_$(VERSION)_$(PLATFORM)_$(ARCH).tar.gz.sha512);
+	@for f in $(FILES); do \
+		(cd $(shell pwd)/build/$$f && tar -cvzf ../../dist/$$f.tar.gz *); \
+		(cd $(shell pwd)/dist && shasum -a 512 $$f.tar.gz > $$f.sha512); \
+		echo $$f; \
+	done
 
 release: dist
 	@latest_tag=$$(git describe --tags `git rev-list --tags --max-count=1`); \
@@ -28,4 +42,4 @@ release: dist
 test:
 	go test ./...
 
-.PHONY: test build install deps dist release
+.PHONY: test build install compile deps dist release
