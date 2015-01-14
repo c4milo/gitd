@@ -1,0 +1,9 @@
+[Unit]
+Description=Git Smart HTTP Backend
+
+[Service]
+ExecStart=/usr/local/bin/gitd -f /etc/gitd.conf
+Restart=on-abort
+
+[Install]
+WantedBy=multi-user.target
