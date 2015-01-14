@@ -1,12 +1,13 @@
 PLATFORM 	:= $(shell go env | grep GOHOSTOS | cut -d '"' -f 2)
 ARCH 		:= $(shell go env | grep GOARCH | cut -d '"' -f 2)
 BRANCH		:= $(shell git rev-parse --abbrev-ref HEAD)
+LDFLAGS 	:= -ldflags "-X main.Version $(VERSION) -X main.Name $(NAME)"
 
 build:
-	go build -ldflags "-X main.Version $(VERSION)" -o build/$(NAME)
+	go build $(LDFLAGS) -o build/$(NAME)
 
 install:
-	go install -ldflags "-X main.Version $(VERSION)"
+	go install $(LDFLAGS)
 
 deps:
 	go get github.com/c4milo/github-release
