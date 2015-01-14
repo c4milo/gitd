@@ -1,3 +1,4 @@
 # Git HTTP Smart Backend
 
-Allows to deploy over HTTP(s)
+Exposes your remote bare repos over HTTP(s)
+
