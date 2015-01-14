@@ -1,0 +1,5 @@
+bind = localhost
+port = 12345
+repos_path = "/tmp/bare_repos"
+log_level = 1
+shutdown_timeout = "15s"
