@@ -23,7 +23,7 @@ release: dist
 	comparison="$$latest_tag..HEAD"; \
 	if [ -z "$$latest_tag" ]; then comparison=""; fi; \
 	changelog=$$(git log $$comparison --oneline --no-merges --reverse); \
-	github-release hooklift/hooklift $(VERSION) $(BRANCH) "**Changelog**<br/>$$changelog" 'dist/*'; \
+	github-release c4milo/$(NAME) $(VERSION) $(BRANCH) "**Changelog**<br/>$$changelog" 'dist/*'; \
 	git pull
 
 test:
