@@ -69,27 +69,28 @@ func init() {
 	}
 }
 
-func main() {
-	mux := http.DefaultServeMux
-
-	// request handlers
+func GitDHTTPHandler(w http.ResponseWriter, req *http.Request) {
 	handlers := map[*regexp.Regexp]func(http.ResponseWriter, *http.Request, string){
 		regexp.MustCompile("(.*?)/git-upload-pack$"):  UploadPack,
 		regexp.MustCompile("(.*?)/git-receive-pack$"): ReceivePack,
 		regexp.MustCompile("(.*?)/info/refs$"):        InfoRefs,
 	}
 
-	mux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
-		for re, handler := range handlers {
-			if m := re.FindStringSubmatch(req.URL.Path); m != nil {
-				repoPath := m[1]
-				handler(w, req, repoPath)
-				return
-			}
+	for re, handler := range handlers {
+		if m := re.FindStringSubmatch(req.URL.Path); m != nil {
+			repoPath := m[1]
+			handler(w, req, repoPath)
+			return
 		}
-		w.WriteHeader(http.StatusBadRequest)
-		w.Write([]byte("Bad Request"))
-	})
+	}
+	w.WriteHeader(http.StatusBadRequest)
+	w.Write([]byte("Bad Request"))
+}
+
+func main() {
+	mux := http.DefaultServeMux
+
+	mux.HandleFunc("/", GitDHTTPHandler)
 
 	address := fmt.Sprintf("%s:%d", config.Bind, config.Port)
 	timeout, err := time.ParseDuration(config.ShutdownTimeout)
@@ -109,15 +110,16 @@ func UploadPack(w http.ResponseWriter, req *http.Request, repoPath string) {
 		w.Write([]byte("Method Not Allowed"))
 		return
 	}
-	cmd := "git-upload-pack"
+	process := "git-upload-pack"
 	cwd := filepath.Join(config.ReposPath, repoPath)
 
 	headers := w.Header()
-	headers.Add("Content-Type", fmt.Sprintf("application/x-%s-result", cmd))
+	headers.Add("Content-Type", fmt.Sprintf("application/x-%s-result", process))
 	w.WriteHeader(http.StatusOK)
 
-	args := []string{"--stateless-rpc", "."}
-	runCommand(cwd, cmd, args, w, req.Body)
+	cmd := exec.Command(process, "--stateless-rpc", ".")
+	cmd.Dir = cwd
+	runCommand(w, req.Body, cmd)
 }
 
 //Runs git-receive-pack in a safe manner
@@ -127,15 +129,16 @@ func ReceivePack(w http.ResponseWriter, req *http.Request, repoPath string) {
 		w.Write([]byte("Method Not Allowed"))
 		return
 	}
-	cmd := "git-receive-pack"
+	process := "git-receive-pack"
 	cwd := filepath.Join(config.ReposPath, repoPath)
 
 	headers := w.Header()
-	headers.Add("Content-Type", fmt.Sprintf("application/x-%s-result", cmd))
+	headers.Add("Content-Type", fmt.Sprintf("application/x-%s-result", process))
 	w.WriteHeader(http.StatusOK)
 
-	args := []string{"--stateless-rpc", "."}
-	runCommand(cwd, cmd, args, w, req.Body)
+	cmd := exec.Command(process, "--stateless-rpc", ".")
+	cmd.Dir = cwd
+	runCommand(w, req.Body, cmd)
 }
 
 func InfoRefs(w http.ResponseWriter, req *http.Request, repoPath string) {
@@ -145,36 +148,39 @@ func InfoRefs(w http.ResponseWriter, req *http.Request, repoPath string) {
 		return
 	}
 
-	cmd := req.URL.Query().Get("service")
+	process := req.URL.Query().Get("service")
 	cwd := filepath.Join(config.ReposPath, repoPath)
 
-	if cmd != "git-receive-pack" && cmd != "git-upload-pack" {
+	if process != "git-receive-pack" && process != "git-upload-pack" {
 		w.WriteHeader(http.StatusBadRequest)
 		w.Write([]byte("Bad Request"))
 		return
 	}
 
 	headers := w.Header()
-	headers.Add("Content-Type", fmt.Sprintf("application/x-%s-advertisement", cmd))
+	headers.Add("Content-Type", fmt.Sprintf("application/x-%s-advertisement", process))
 	w.WriteHeader(http.StatusOK)
 
-	w.Write(packetWrite(fmt.Sprintf("# service=%s\n", cmd)))
+	w.Write(packetWrite(fmt.Sprintf("# service=%s\n", process)))
 	w.Write(packetFlush())
 
-	args := []string{"--stateless-rpc", "--advertise-refs", "."}
-	runCommand(cwd, cmd, args, w, req.Body)
+	cmd := exec.Command(process, "--stateless-rpc", "--advertise-refs", ".")
+	cmd.Dir = cwd
+	runCommand(w, req.Body, cmd)
 }
 
 // Executes a shell command and pipes its output to HTTP response writer.
 // DO NOT expose this function directly to end users as it creates a security breach
-func runCommand(cwd, command string, args []string, w io.Writer, r io.Reader) {
-	log.WithFields(log.Fields{
-		"command": command,
-		"args":    args,
-	}).Debug("Running command")
+func runCommand(w io.Writer, r io.Reader, cmd *exec.Cmd) {
+	if cmd.Dir != "" {
+		cmd.Dir = sanitize(cmd.Dir)
+	}
 
-	cmd := exec.Command(command, args...)
-	cmd.Dir = sanitize(cwd)
+	log.WithFields(log.Fields{
+		"path": cmd.Path,
+		"args": cmd.Args,
+		"wd":   cmd.Dir,
+	}).Debug("Running command")
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
@@ -183,11 +189,11 @@ func runCommand(cwd, command string, args []string, w io.Writer, r io.Reader) {
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		log.Error(err)
+		log.Errorf("%v", err)
 	}
 
 	if err := cmd.Start(); err != nil {
-		log.Error(err)
+		log.Errorf("%v", err)
 	}
 
 	io.Copy(stdin, r)
