@@ -2,8 +2,8 @@
 // License, version 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-// Implements Git Smart HTTP backend using
-// https://github.com/git/git/blob/master/http-backend.c as reference implementation
+// Implements Git Smart HTTP backend using its C implementation as reference:
+// https://github.com/git/git/blob/master/http-backend.c
 package main
 
 import (
@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"os"
 	"os/exec"
@@ -22,8 +23,8 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	log "github.com/Sirupsen/logrus"
 	"github.com/c4milo/handlers/logger"
+	"github.com/hashicorp/logutils"
 	"github.com/stretchr/graceful"
 )
 
@@ -34,18 +35,18 @@ var Version string
 var Name string
 
 type Config struct {
-	Bind            string    `toml:"bind"`
-	Port            uint      `toml:"port"`
-	ReposPath       string    `toml:"repos_path"`
-	LogLevel        log.Level `toml:"log_level"`
-	ShutdownTimeout string    `toml:"shutdown_timeout"`
+	Bind            string `toml:"bind"`
+	Port            uint   `toml:"port"`
+	ReposPath       string `toml:"repos_path"`
+	LogLevel        string `toml:"log_level"`
+	ShutdownTimeout string `toml:"shutdown_timeout"`
 }
 
 // Default configuration
 var config Config = Config{
 	Bind:            "localhost",
 	Port:            12345,
-	LogLevel:        log.InfoLevel,
+	LogLevel:        "WARN",
 	ShutdownTimeout: "15s",
 }
 
@@ -54,23 +55,31 @@ var configFile string
 
 func init() {
 	if !checkGitVersion(2, 2, 1) {
-		log.Panicln("Git >= v2.2.1 is required")
+		log.Fatalln("Git >= v2.2.1 is required")
 	}
 
 	reposPath, err := ioutil.TempDir(os.TempDir(), Name)
 	if err != nil {
-		log.Fatalf("%v", err)
+		log.Fatalf("%v\n", err)
 	}
 
 	config.ReposPath = reposPath
 
-	flag.StringVar(&configFile, "f", "/etc/gitd.conf", "config file path")
+	flag.StringVar(&configFile, "f", "", "config file path")
 	flag.Parse()
 
 	if _, err := toml.DecodeFile(configFile, &config); err != nil {
-		log.Errorf("%v", err)
-		log.Warn("Error parsing config file, using default configuration")
+		log.Printf("[ERROR] %v", err)
+		log.Print("[ERROR] Parsing config file, using default configuration")
 	}
+
+	filter := &logutils.LevelFilter{
+		Levels:   []logutils.LogLevel{"DEBUG", "WARN", "ERROR"},
+		MinLevel: logutils.LogLevel(config.LogLevel),
+		Writer:   os.Stderr,
+	}
+
+	log.SetOutput(filter)
 }
 
 func GitDHTTPHandler(w http.ResponseWriter, req *http.Request) {
@@ -99,11 +108,11 @@ func main() {
 	address := fmt.Sprintf("%s:%d", config.Bind, config.Port)
 	timeout, err := time.ParseDuration(config.ShutdownTimeout)
 	if err != nil {
-		log.Fatalf("%v", err)
+		log.Fatalf("[ERROR] %v", err)
 	}
 
-	log.Printf("Listening on %s...", address)
-	log.Printf("Serving Git repositories over HTTP from %s", config.ReposPath)
+	log.Printf("[INFO] Listening on %s...", address)
+	log.Printf("[INFO] Serving Git repositories over HTTP from %s", config.ReposPath)
 	graceful.Run(address, timeout, logger.Handler(mux, logger.AppName("gitd")))
 }
 
@@ -180,24 +189,20 @@ func runCommand(w io.Writer, r io.Reader, cmd *exec.Cmd) {
 		cmd.Dir = sanitize(cmd.Dir)
 	}
 
-	log.WithFields(log.Fields{
-		"path": cmd.Path,
-		"args": cmd.Args,
-		"wd":   cmd.Dir,
-	}).Debug("Running command")
+	log.Printf("[DEBUG] Running command from %s: %s %s ", cmd.Dir, cmd.Path, cmd.Args)
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
-		log.Error(err)
+		log.Printf("[ERROR] %v", err)
 	}
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		log.Errorf("%v", err)
+		log.Printf("[ERROR] %v", err)
 	}
 
 	if err := cmd.Start(); err != nil {
-		log.Errorf("%v", err)
+		log.Printf("[ERROR] %v", err)
 	}
 
 	io.Copy(stdin, r)

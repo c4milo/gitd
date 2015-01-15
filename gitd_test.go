@@ -7,6 +7,7 @@ package main
 import (
 	"fmt"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -16,7 +17,6 @@ import (
 	"runtime"
 	"testing"
 
-	log "github.com/Sirupsen/logrus"
 	"github.com/c4milo/handlers/logger"
 )
 
