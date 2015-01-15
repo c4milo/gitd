@@ -1,5 +1,6 @@
-bind = localhost
+bind = "localhost"
 port = 12345
-repos_path = "/tmp/bare_repos"
-log_level = 1
+repos_path = "./repos"
+log_level = "WARN" # WARN, ERROR, DEBUG, INFO
+log_file = "./myapp.log"
 shutdown_timeout = "15s"

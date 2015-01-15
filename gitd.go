@@ -39,6 +39,7 @@ type Config struct {
 	Port            uint   `toml:"port"`
 	ReposPath       string `toml:"repos_path"`
 	LogLevel        string `toml:"log_level"`
+	LogFilePath     string `toml:"log_file"`
 	ShutdownTimeout string `toml:"shutdown_timeout"`
 }
 
@@ -62,7 +63,6 @@ func init() {
 	if err != nil {
 		log.Fatalf("%v\n", err)
 	}
-
 	config.ReposPath = reposPath
 
 	flag.StringVar(&configFile, "f", "", "config file path")
@@ -72,14 +72,6 @@ func init() {
 		log.Printf("[ERROR] %v", err)
 		log.Print("[ERROR] Parsing config file, using default configuration")
 	}
-
-	filter := &logutils.LevelFilter{
-		Levels:   []logutils.LogLevel{"DEBUG", "WARN", "ERROR"},
-		MinLevel: logutils.LogLevel(config.LogLevel),
-		Writer:   os.Stderr,
-	}
-
-	log.SetOutput(filter)
 }
 
 func GitDHTTPHandler(w http.ResponseWriter, req *http.Request) {
@@ -101,8 +93,28 @@ func GitDHTTPHandler(w http.ResponseWriter, req *http.Request) {
 }
 
 func main() {
-	mux := http.DefaultServeMux
+	var logWriter io.Writer
+	if config.LogFilePath != "" {
+		var err error
+		logWriter, err = os.OpenFile(config.LogFilePath, os.O_RDWR|os.O_APPEND, 0660)
+		if err != nil {
+			log.Printf("[WARN] %v", err)
+		}
+	}
 
+	if logWriter == nil {
+		logWriter = os.Stderr
+	}
+
+	filter := &logutils.LevelFilter{
+		Levels:   []logutils.LogLevel{"DEBUG", "WARN", "ERROR"},
+		MinLevel: logutils.LogLevel(config.LogLevel),
+		Writer:   logWriter,
+	}
+
+	log.SetOutput(filter)
+
+	mux := http.DefaultServeMux
 	mux.HandleFunc("/", GitDHTTPHandler)
 
 	address := fmt.Sprintf("%s:%d", config.Bind, config.Port)
