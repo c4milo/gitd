@@ -15,6 +15,7 @@ compile:
 	-os="darwin" \
 	-os="linux" \
 	-os="solaris" \
+	-os="freebsd" \
 	-output "build/{{.Dir}}_$(VERSION)_{{.OS}}_{{.Arch}}/$(NAME)" \
 	./...
 
