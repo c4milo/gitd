@@ -74,7 +74,7 @@ func init() {
 	}
 }
 
-func GitDHTTPHandler(w http.ResponseWriter, req *http.Request) {
+func Handler(w http.ResponseWriter, req *http.Request) {
 	handlers := map[*regexp.Regexp]func(http.ResponseWriter, *http.Request, string){
 		regexp.MustCompile("(.*?)/git-upload-pack$"):  UploadPack,
 		regexp.MustCompile("(.*?)/git-receive-pack$"): ReceivePack,
@@ -115,7 +115,7 @@ func main() {
 	log.SetOutput(filter)
 
 	mux := http.DefaultServeMux
-	mux.HandleFunc("/", GitDHTTPHandler)
+	mux.HandleFunc("/", Handler)
 
 	address := fmt.Sprintf("%s:%d", config.Bind, config.Port)
 	timeout, err := time.ParseDuration(config.ShutdownTimeout)
