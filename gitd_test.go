@@ -53,7 +53,7 @@ func init() {
 
 func TestGitD(t *testing.T) {
 	// Start service
-	gitdHandler := http.HandlerFunc(GitDHTTPHandler)
+	gitdHandler := http.HandlerFunc(Handler)
 	handler := logger.Handler(gitdHandler, logger.Output(ioutil.Discard))
 	ts := httptest.NewServer(handler)
 	defer ts.Close()

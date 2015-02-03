@@ -7,6 +7,7 @@
 package main
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"io"
@@ -254,7 +255,73 @@ func sanitize(name string) string {
 	return name
 }
 
-func checkGitVersion(major, minor, patch uint) bool {
-	//TODO
+func checkGitVersion(major, minor, patch int) bool {
+	git, err := exec.LookPath("git")
+	if err != nil {
+		log.Printf("[ERROR] %v", err)
+		return false
+	}
+
+	cmd := exec.Command(git, "--version")
+	var stdout string
+	if stdout, _, err = runAndLog(cmd); err != nil {
+		log.Printf("[ERROR] %v", err)
+		return false
+	}
+
+	output := strings.Split(stdout, "\n")
+	if len(output) < 2 {
+		log.Printf("[DEBUG] git version output: %v", output)
+		return false
+	}
+
+	parts := strings.Split(output[0], " ")
+	if len(parts) < 3 {
+		log.Printf("[DEBUG] git version parts: %v", parts)
+		return false
+	}
+
+	version := strings.Split(parts[2], ".")
+	major2, _ := strconv.Atoi(version[0])
+	minor2, _ := strconv.Atoi(version[1])
+	patch2, _ := strconv.Atoi(version[2])
+
+	if major2 < major || minor2 < minor || patch2 < patch {
+		log.Printf("[INFO] git version not supported: %d.%d.%d", major2, minor2, patch2)
+		return false
+	}
+
 	return true
+}
+
+// Borrowed from https://github.com/mitchellh/packer/blob/master/builder/vmware/common/driver.go
+func runAndLog(cmd *exec.Cmd) (string, string, error) {
+	var stdout, stderr bytes.Buffer
+
+	log.Printf("[VMWare] Executing: %s %v", cmd.Path, cmd.Args[1:])
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	err := cmd.Run()
+
+	stdoutString := strings.TrimSpace(stdout.String())
+	stderrString := strings.TrimSpace(stderr.String())
+
+	if _, ok := err.(*exec.ExitError); ok {
+		message := stderrString
+		if message == "" {
+			message = stdoutString
+		}
+
+		err = fmt.Errorf("[VMWare] error: %s", message)
+	}
+
+	log.Printf("stdout: %s", stdoutString)
+	log.Printf("stderr: %s", stderrString)
+
+	// Replace these for Windows, we only want to deal with Unix
+	// style line endings.
+	returnStdout := strings.Replace(stdout.String(), "\r\n", "\n", -1)
+	returnStderr := strings.Replace(stderr.String(), "\r\n", "\n", -1)
+
+	return returnStdout, returnStderr, err
 }
