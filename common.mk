@@ -22,6 +22,8 @@ compile:
 deps:
 	go get github.com/c4milo/github-release
 	go get github.com/mitchellh/gox
+	go get github.com/BurntSushi/toml
+	go get github.com/stretchr/graceful
 
 dist: compile
 	$(eval FILES := $(shell ls build))
