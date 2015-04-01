@@ -24,6 +24,8 @@ deps:
 	go get github.com/mitchellh/gox
 	go get github.com/BurntSushi/toml
 	go get github.com/stretchr/graceful
+	go get github.com/hashicorp/logutils
+	go get github.com/c4milo/handlers/logger
 
 dist: compile
 	$(eval FILES := $(shell ls build))
