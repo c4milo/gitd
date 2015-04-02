@@ -298,7 +298,7 @@ func checkGitVersion(major, minor, patch int) bool {
 func runAndLog(cmd *exec.Cmd) (string, string, error) {
 	var stdout, stderr bytes.Buffer
 
-	log.Printf("[VMWare] Executing: %s %v", cmd.Path, cmd.Args[1:])
+	log.Printf("[GitD] Executing: %s %v", cmd.Path, cmd.Args[1:])
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 	err := cmd.Run()
@@ -312,7 +312,7 @@ func runAndLog(cmd *exec.Cmd) (string, string, error) {
 			message = stdoutString
 		}
 
-		err = fmt.Errorf("[VMWare] error: %s", message)
+		err = fmt.Errorf("[GitD] error: %s", message)
 	}
 
 	log.Printf("stdout: %s", stdoutString)
