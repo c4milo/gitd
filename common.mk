@@ -3,6 +3,9 @@ ARCH 		:= $(shell go env | grep GOARCH | cut -d '"' -f 2)
 BRANCH		:= $(shell git rev-parse --abbrev-ref HEAD)
 LDFLAGS 	:= -ldflags "-X main.Version $(VERSION) -X main.Name $(NAME)"
 
+test:
+	go test ./...
+
 build:
 	go build $(LDFLAGS) -o build/$(NAME)
 
@@ -43,8 +46,5 @@ release: dist
 	changelog=$$(git log $$comparison --oneline --no-merges --reverse); \
 	github-release c4milo/$(NAME) $(VERSION) $(BRANCH) "**Changelog**<br/>$$changelog" 'dist/*'; \
 	git pull
-
-test:
-	go test ./...
 
 .PHONY: test build install compile deps dist release
