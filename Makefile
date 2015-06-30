@@ -1,4 +1,4 @@
 NAME := gitd
-VERSION := v1.0.1
+VERSION := v2.0.0
 
 include common.mk
