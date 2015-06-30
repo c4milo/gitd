@@ -2,7 +2,7 @@
 // License, version 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-// Implements Git Smart HTTP backend using its C implementation as reference:
+// Implements Git Smart HTTP backend using Git's C implementation as reference:
 // https://github.com/git/git/blob/master/http-backend.c
 package main
 
@@ -35,6 +35,7 @@ var Version string
 // Name is injected in build time and defined in the Makefile
 var Name string
 
+// Config defines the configurable options for this service.
 type Config struct {
 	Bind            string `toml:"bind"`
 	Port            uint   `toml:"port"`
@@ -45,7 +46,7 @@ type Config struct {
 }
 
 // Default configuration
-var config Config = Config{
+var config = Config{
 	Bind:            "localhost",
 	Port:            12345,
 	LogLevel:        "WARN",
@@ -71,10 +72,12 @@ func init() {
 
 	if _, err := toml.DecodeFile(configFile, &config); err != nil {
 		log.Printf("[ERROR] %v", err)
-		log.Print("[ERROR] Parsing config file, using default configuration")
+		log.Print("[ERROR] Parsing config file, using default configuration.")
 	}
 }
 
+// Handler is the entry point of all the HTTP requests, it invokes the specific
+// function depending on the URL pattern.
 func Handler(w http.ResponseWriter, req *http.Request) {
 	handlers := map[*regexp.Regexp]func(http.ResponseWriter, *http.Request, string){
 		regexp.MustCompile("(.*?)/git-upload-pack$"):  UploadPack,
@@ -126,10 +129,11 @@ func main() {
 
 	log.Printf("[INFO] Listening on %s...", address)
 	log.Printf("[INFO] Serving Git repositories over HTTP from %s", config.ReposPath)
+
 	graceful.Run(address, timeout, logger.Handler(mux, logger.AppName("gitd")))
 }
 
-// Runs git-upload-pack in a safe manner
+// UploadPack runs git-upload-pack in a safe manner.
 func UploadPack(w http.ResponseWriter, req *http.Request, repoPath string) {
 	if req.Method != "POST" {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -148,7 +152,7 @@ func UploadPack(w http.ResponseWriter, req *http.Request, repoPath string) {
 	runCommand(w, req.Body, cmd)
 }
 
-//Runs git-receive-pack in a safe manner
+// ReceivePack runs git-receive-pack in a safe manner.
 func ReceivePack(w http.ResponseWriter, req *http.Request, repoPath string) {
 	if req.Method != "POST" {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -167,6 +171,7 @@ func ReceivePack(w http.ResponseWriter, req *http.Request, repoPath string) {
 	runCommand(w, req.Body, cmd)
 }
 
+// InfoRefs returns Git object refs.
 func InfoRefs(w http.ResponseWriter, req *http.Request, repoPath string) {
 	if req.Method != "GET" {
 		w.WriteHeader(http.StatusMethodNotAllowed)
@@ -195,8 +200,8 @@ func InfoRefs(w http.ResponseWriter, req *http.Request, repoPath string) {
 	runCommand(w, req.Body, cmd)
 }
 
-// Executes a shell command and pipes its output to HTTP response writer.
-// DO NOT expose this function directly to end users as it creates a security breach
+// runCommand executes a shell command and pipes its output to HTTP response writer.
+// DO NOT expose this function directly to end users as it will create a security breach.
 func runCommand(w io.Writer, r io.Reader, cmd *exec.Cmd) {
 	if cmd.Dir != "" {
 		cmd.Dir = sanitize(cmd.Dir)
@@ -223,7 +228,7 @@ func runCommand(w io.Writer, r io.Reader, cmd *exec.Cmd) {
 	cmd.Wait()
 }
 
-// Returns bytes of a git packet containing the given string
+// packetWrite returns bytes of a git packet containing the given string
 func packetWrite(str string) []byte {
 	s := strconv.FormatInt(int64((len(str) + 4)), 16)
 
@@ -239,7 +244,7 @@ func packetFlush() []byte {
 	return []byte("0000")
 }
 
-// Sanitizes name to avoid overwriting sensitive system files
+// sanitize Sanitizes name to avoid overwriting sensitive system files
 // or executing forbidden binaries
 func sanitize(name string) string {
 	// Gets rid of volume drive label in Windows
@@ -255,6 +260,8 @@ func sanitize(name string) string {
 	return name
 }
 
+// checkGitVersion checks a given Git version and returns whether or not
+// the required version is installed in the system.
 func checkGitVersion(major, minor, patch int) bool {
 	git, err := exec.LookPath("git")
 	if err != nil {
@@ -295,6 +302,7 @@ func checkGitVersion(major, minor, patch int) bool {
 }
 
 // Borrowed from https://github.com/mitchellh/packer/blob/master/builder/vmware/common/driver.go
+// runAndLog executes Git commands and logs output.
 func runAndLog(cmd *exec.Cmd) (string, string, error) {
 	var stdout, stderr bytes.Buffer
 
