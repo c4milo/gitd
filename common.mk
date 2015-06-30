@@ -7,7 +7,7 @@ test:
 	go test ./...
 
 build:
-	go build $(LDFLAGS) -o build/$(NAME)
+	go build -o build/$(NAME) $(LDFLAGS) cmd/$(NAME).go
 
 install:
 	go install $(LDFLAGS)

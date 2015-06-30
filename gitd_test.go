@@ -2,7 +2,7 @@
 // License, version 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-package main
+package gitd
 
 import (
 	"fmt"
@@ -19,8 +19,12 @@ import (
 )
 
 func TestGitD(t *testing.T) {
+	// Creates test repos path
+	rpath, err := ioutil.TempDir(os.TempDir(), "gitd")
+	assert.Ok(t, err)
+
 	// Start service
-	gitdHandler := http.HandlerFunc(Handler)
+	gitdHandler := Handler(http.DefaultServeMux, ReposPath(rpath))
 	handler := logger.Handler(gitdHandler, logger.Output(ioutil.Discard))
 	ts := httptest.NewServer(handler)
 	defer ts.Close()
@@ -28,11 +32,11 @@ func TestGitD(t *testing.T) {
 	// Create bare repository
 	repoName := "test"
 	cmd := exec.Command("git", "--bare", "init", repoName+".git")
-	cmd.Dir = config.ReposPath
-	err := cmd.Run()
+	cmd.Dir = rpath
+	err = cmd.Run()
 	assert.Ok(t, err)
 
-	workspace, err := ioutil.TempDir(os.TempDir(), Name+"-clones")
+	workspace, err := ioutil.TempDir(os.TempDir(), "gitd-clones")
 	assert.Ok(t, err)
 
 	// Clone bare repo

@@ -2,13 +2,12 @@
 // License, version 2.0. If a copy of the MPL was not distributed with this
 // file, You can obtain one at http://mozilla.org/MPL/2.0/.
 
-// Implements Git Smart HTTP backend using Git's C implementation as reference:
-// https://github.com/git/git/blob/master/http-backend.c
-package main
+// Package gitd Implements Git Smart HTTP backend as a HTTP handler,
+// using Git's C implementation as reference: https://github.com/git/git/blob/master/http-backend.c
+package gitd
 
 import (
 	"bytes"
-	"flag"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -21,127 +20,73 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
-	"time"
-
-	"github.com/BurntSushi/toml"
-	"github.com/c4milo/handlers/logger"
-	"github.com/hashicorp/logutils"
-	"github.com/stretchr/graceful"
 )
-
-// Version is injected in build time and defined in the Makefile
-var Version string
-
-// Name is injected in build time and defined in the Makefile
-var Name string
-
-// Config defines the configurable options for this service.
-type Config struct {
-	Bind            string `toml:"bind"`
-	Port            uint   `toml:"port"`
-	ReposPath       string `toml:"repos_path"`
-	LogLevel        string `toml:"log_level"`
-	LogFilePath     string `toml:"log_file"`
-	ShutdownTimeout string `toml:"shutdown_timeout"`
-}
-
-// Default configuration
-var config = Config{
-	Bind:            "localhost",
-	Port:            12345,
-	LogLevel:        "WARN",
-	ShutdownTimeout: "15s",
-}
-
-// Configuration file path
-var configFile string
 
 func init() {
 	if !checkGitVersion(2, 2, 1) {
 		log.Fatalln("Git >= v2.2.1 is required")
 	}
+}
 
-	reposPath, err := ioutil.TempDir(os.TempDir(), Name)
+// http://commandcenter.blogspot.com/2014/01/self-referential-functions-and-design.html
+type option func(*handler)
+
+// Internal handler
+type handler struct {
+	reposPath string
+}
+
+// ReposPath allows to set the root path where the Git bare repos live.
+func ReposPath(rpath string) option {
+	return func(l *handler) {
+		l.reposPath = rpath
+	}
+}
+
+// Handler configures the handler and returns an HTTP handler function.
+func Handler(h http.Handler, opts ...option) http.Handler {
+	reposPath, err := ioutil.TempDir(os.TempDir(), "gitd")
 	if err != nil {
 		log.Fatalf("%v\n", err)
 	}
-	config.ReposPath = reposPath
 
-	flag.StringVar(&configFile, "f", "", "config file path")
-	flag.Parse()
-
-	if _, err := toml.DecodeFile(configFile, &config); err != nil {
-		log.Printf("[ERROR] %v", err)
-		log.Print("[ERROR] Parsing config file, using default configuration.")
-	}
-}
-
-// Handler is the entry point of all the HTTP requests, it invokes the specific
-// function depending on the URL pattern.
-func Handler(w http.ResponseWriter, req *http.Request) {
-	handlers := map[*regexp.Regexp]func(http.ResponseWriter, *http.Request, string){
-		regexp.MustCompile("(.*?)/git-upload-pack$"):  UploadPack,
-		regexp.MustCompile("(.*?)/git-receive-pack$"): ReceivePack,
-		regexp.MustCompile("(.*?)/info/refs$"):        InfoRefs,
+	// Default configuration.
+	handler := &handler{
+		reposPath: reposPath,
 	}
 
-	for re, handler := range handlers {
-		if m := re.FindStringSubmatch(req.URL.Path); m != nil {
-			repoPath := m[1]
-			handler(w, req, repoPath)
-			return
+	// Sets users specified configurations, overriding default ones.
+	for _, opt := range opts {
+		opt(handler)
+	}
+
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		handlers := map[*regexp.Regexp]func(http.ResponseWriter, *http.Request, string, string){
+			regexp.MustCompile("(.*?)/git-upload-pack$"):  UploadPack,
+			regexp.MustCompile("(.*?)/git-receive-pack$"): ReceivePack,
+			regexp.MustCompile("(.*?)/info/refs$"):        InfoRefs,
 		}
-	}
-	w.WriteHeader(http.StatusBadRequest)
-	w.Write([]byte("Bad Request"))
-}
 
-func main() {
-	var logWriter io.Writer
-	if config.LogFilePath != "" {
-		var err error
-		logWriter, err = os.OpenFile(config.LogFilePath, os.O_RDWR|os.O_APPEND, 0660)
-		if err != nil {
-			log.Printf("[WARN] %v", err)
+		for re, fn := range handlers {
+			if m := re.FindStringSubmatch(req.URL.Path); m != nil {
+				repoPath := m[1]
+				fn(w, req, handler.reposPath, repoPath)
+				return
+			}
 		}
-	}
-
-	if logWriter == nil {
-		logWriter = os.Stderr
-	}
-
-	filter := &logutils.LevelFilter{
-		Levels:   []logutils.LogLevel{"DEBUG", "WARN", "ERROR"},
-		MinLevel: logutils.LogLevel(config.LogLevel),
-		Writer:   logWriter,
-	}
-
-	log.SetOutput(filter)
-
-	mux := http.DefaultServeMux
-	mux.HandleFunc("/", Handler)
-
-	address := fmt.Sprintf("%s:%d", config.Bind, config.Port)
-	timeout, err := time.ParseDuration(config.ShutdownTimeout)
-	if err != nil {
-		log.Fatalf("[ERROR] %v", err)
-	}
-
-	log.Printf("[INFO] Listening on %s...", address)
-	log.Printf("[INFO] Serving Git repositories over HTTP from %s", config.ReposPath)
-
-	graceful.Run(address, timeout, logger.Handler(mux, logger.AppName("gitd")))
+		h.ServeHTTP(w, req)
+	})
 }
 
 // UploadPack runs git-upload-pack in a safe manner.
-func UploadPack(w http.ResponseWriter, req *http.Request, repoPath string) {
+func UploadPack(w http.ResponseWriter, req *http.Request, reposPath, repoPath string) {
 	if req.Method != "POST" {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		w.Write([]byte("Method Not Allowed"))
 		return
 	}
 	process := "git-upload-pack"
-	cwd := filepath.Join(config.ReposPath, repoPath)
+	cwd := filepath.Join(reposPath, repoPath)
 
 	headers := w.Header()
 	headers.Add("Content-Type", fmt.Sprintf("application/x-%s-result", process))
@@ -153,14 +98,14 @@ func UploadPack(w http.ResponseWriter, req *http.Request, repoPath string) {
 }
 
 // ReceivePack runs git-receive-pack in a safe manner.
-func ReceivePack(w http.ResponseWriter, req *http.Request, repoPath string) {
+func ReceivePack(w http.ResponseWriter, req *http.Request, reposPath, repoPath string) {
 	if req.Method != "POST" {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		w.Write([]byte("Method Not Allowed"))
 		return
 	}
 	process := "git-receive-pack"
-	cwd := filepath.Join(config.ReposPath, repoPath)
+	cwd := filepath.Join(reposPath, repoPath)
 
 	headers := w.Header()
 	headers.Add("Content-Type", fmt.Sprintf("application/x-%s-result", process))
@@ -172,7 +117,7 @@ func ReceivePack(w http.ResponseWriter, req *http.Request, repoPath string) {
 }
 
 // InfoRefs returns Git object refs.
-func InfoRefs(w http.ResponseWriter, req *http.Request, repoPath string) {
+func InfoRefs(w http.ResponseWriter, req *http.Request, reposPath, repoPath string) {
 	if req.Method != "GET" {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		w.Write([]byte("Method Not Allowed"))
@@ -180,7 +125,7 @@ func InfoRefs(w http.ResponseWriter, req *http.Request, repoPath string) {
 	}
 
 	process := req.URL.Query().Get("service")
-	cwd := filepath.Join(config.ReposPath, repoPath)
+	cwd := filepath.Join(reposPath, repoPath)
 
 	if process != "git-receive-pack" && process != "git-upload-pack" {
 		w.WriteHeader(http.StatusBadRequest)
