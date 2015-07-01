@@ -22,15 +22,6 @@ compile:
 	-output "build/{{.Dir}}_$(VERSION)_{{.OS}}_{{.Arch}}/$(NAME)" \
 	./...
 
-deps:
-	go get github.com/c4milo/github-release
-	go get github.com/mitchellh/gox
-	go get github.com/BurntSushi/toml
-	go get github.com/hashicorp/logutils
-	go get github.com/c4milo/handlers/logger
-	go get github.com/hooklift/assert
-	go get gopkg.in/tylerb/graceful.v1
-
 dist: compile
 	$(eval FILES := $(shell ls build))
 	@rm -rf dist && mkdir dist
@@ -45,7 +36,7 @@ release: dist
 	comparison="$$latest_tag..HEAD"; \
 	if [ -z "$$latest_tag" ]; then comparison=""; fi; \
 	changelog=$$(git log $$comparison --oneline --no-merges --reverse); \
-	github-release c4milo/$(NAME) $(VERSION) $(BRANCH) "**Changelog**<br/>$$changelog" 'dist/*'; \
+	github-release $(GHACCOUNT)/$(NAME) $(VERSION) $(BRANCH) "**Changelog**<br/>$$changelog" 'dist/*'; \
 	git pull
 
 .PHONY: test build install compile deps dist release
