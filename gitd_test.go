@@ -40,7 +40,7 @@ func TestGitD(t *testing.T) {
 	assert.Ok(t, err)
 
 	// Clone bare repo
-	cmd = exec.Command("git", "clone", ts.URL+"/"+repoName+".git")
+	cmd = exec.Command("git", "clone", ts.URL+"/"+repoName+".git", repoName)
 	cmd.Dir = workspace
 	err = cmd.Run()
 	assert.Ok(t, err)
