@@ -8,6 +8,7 @@ package gitd
 
 import (
 	"bytes"
+	"compress/gzip"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -62,9 +63,9 @@ func Handler(h http.Handler, opts ...option) http.Handler {
 
 	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		handlers := map[*regexp.Regexp]func(http.ResponseWriter, *http.Request, string, string){
-			regexp.MustCompile("(.*?)/git-upload-pack$"):  UploadPack,
-			regexp.MustCompile("(.*?)/git-receive-pack$"): ReceivePack,
-			regexp.MustCompile("(.*?)/info/refs$"):        InfoRefs,
+			regexp.MustCompile("(.*?)/git-upload-pack$"):  uploadPack,
+			regexp.MustCompile("(.*?)/git-receive-pack$"): receivePack,
+			regexp.MustCompile("(.*?)/info/refs$"):        infoRefs,
 		}
 
 		for re, fn := range handlers {
@@ -78,8 +79,8 @@ func Handler(h http.Handler, opts ...option) http.Handler {
 	})
 }
 
-// UploadPack runs git-upload-pack in a safe manner.
-func UploadPack(w http.ResponseWriter, req *http.Request, reposPath, repoPath string) {
+// uploadPack runs git-upload-pack in a safe manner.
+func uploadPack(w http.ResponseWriter, req *http.Request, reposPath, repoPath string) {
 	if req.Method != "POST" {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		w.Write([]byte("Method Not Allowed"))
@@ -94,11 +95,19 @@ func UploadPack(w http.ResponseWriter, req *http.Request, reposPath, repoPath st
 
 	cmd := exec.Command(process, "--stateless-rpc", ".")
 	cmd.Dir = cwd
-	runCommand(w, req.Body, cmd)
+
+	body, err := decompress(req)
+	if err != nil {
+		log.Printf("[ERROR] Error attempting to decompress request body: %+v", err)
+		body = req.Body
+	}
+
+	runCommand(w, body, cmd)
+	req.Body.Close()
 }
 
-// ReceivePack runs git-receive-pack in a safe manner.
-func ReceivePack(w http.ResponseWriter, req *http.Request, reposPath, repoPath string) {
+// receivePack runs git-receive-pack in a safe manner.
+func receivePack(w http.ResponseWriter, req *http.Request, reposPath, repoPath string) {
 	if req.Method != "POST" {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		w.Write([]byte("Method Not Allowed"))
@@ -113,11 +122,19 @@ func ReceivePack(w http.ResponseWriter, req *http.Request, reposPath, repoPath s
 
 	cmd := exec.Command(process, "--stateless-rpc", ".")
 	cmd.Dir = cwd
-	runCommand(w, req.Body, cmd)
+
+	body, err := decompress(req)
+	if err != nil {
+		log.Printf("[ERROR] Error attempting to decompress request body: %+v", err)
+		body = req.Body
+	}
+
+	runCommand(w, body, cmd)
+	req.Body.Close()
 }
 
-// InfoRefs returns Git object refs.
-func InfoRefs(w http.ResponseWriter, req *http.Request, reposPath, repoPath string) {
+// infoRefs returns Git object refs.
+func infoRefs(w http.ResponseWriter, req *http.Request, reposPath, repoPath string) {
 	if req.Method != "GET" {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 		w.Write([]byte("Method Not Allowed"))
@@ -142,7 +159,15 @@ func InfoRefs(w http.ResponseWriter, req *http.Request, reposPath, repoPath stri
 
 	cmd := exec.Command(process, "--stateless-rpc", "--advertise-refs", ".")
 	cmd.Dir = cwd
-	runCommand(w, req.Body, cmd)
+
+	body, err := decompress(req)
+	if err != nil {
+		log.Printf("[ERROR] Error attempting to decompress request body: %+v", err)
+		body = req.Body
+	}
+
+	runCommand(w, body, cmd)
+	req.Body.Close()
 }
 
 // runCommand executes a shell command and pipes its output to HTTP response writer.
@@ -187,6 +212,16 @@ func packetWrite(str string) []byte {
 
 func packetFlush() []byte {
 	return []byte("0000")
+}
+
+// decompress unzips request body if it is compressed by Git clients.
+func decompress(r *http.Request) (io.Reader, error) {
+	encoding := r.Header.Get("Content-Encoding")
+	if encoding != "gzip" && encoding != "x-gzip" {
+		return r.Body, nil
+	}
+
+	return gzip.NewReader(r.Body)
 }
 
 // sanitize Sanitizes name to avoid overwriting sensitive system files
