@@ -30,6 +30,7 @@ deps:
 	go get github.com/hashicorp/logutils
 	go get github.com/c4milo/handlers/logger
 	go get github.com/hooklift/assert
+	go get gopkg.in/tylerb/graceful.v1
 
 dist: compile
 	$(eval FILES := $(shell ls build))
