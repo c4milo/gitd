@@ -59,6 +59,17 @@ func TestGitD(t *testing.T) {
 	err = cmd.Run()
 	assert.Ok(t, err)
 
+	// Initialize git configurations
+	cmd = exec.Command("git", "config", "--local", "user.name", "Gitd tests")
+	cmd.Dir = repoPath
+	err = cmd.Run()
+	assert.Ok(t, err)
+
+	cmd = exec.Command("git", "config", "--local", "user.email", "test@hooklift.io")
+	cmd.Dir = repoPath
+	err = cmd.Run()
+	assert.Ok(t, err)
+
 	// commit file
 	cmd = exec.Command("git", "commit", "-m", `'testing gitd'`)
 	cmd.Dir = repoPath
