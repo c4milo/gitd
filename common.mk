@@ -19,7 +19,7 @@ compile:
 	-os="linux" \
 	-os="solaris" \
 	-os="freebsd" \
-	-output "build/{{.Dir}}_$(VERSION)_{{.OS}}_{{.Arch}}/$(NAME)" \
+	-output "build/$(NAME)_$(VERSION)_{{.OS}}_{{.Arch}}/$(NAME)" \
 	./...
 
 dist: compile
