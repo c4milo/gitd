@@ -1,6 +1,6 @@
 GHACCOUNT := c4milo
 NAME := gitd
-VERSION := v2.0.1
+VERSION := v2.0.2
 
 include common.mk
 
