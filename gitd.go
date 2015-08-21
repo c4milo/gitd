@@ -273,8 +273,8 @@ func checkGitVersion(major, minor, patch int) bool {
 	minor2, _ := strconv.Atoi(version[1])
 	patch2, _ := strconv.Atoi(version[2])
 
-	if major2 < major || minor2 < minor || patch2 < patch {
-		log.Printf("[INFO] git version not supported: %d.%d.%d", major2, minor2, patch2)
+	if major2 < major && minor2 < minor && patch2 < patch {
+		log.Printf("[INFO] git version not supported: %d.%d.%d < %d.%d.%d", major2, minor2, patch2, major, minor, patch)
 		return false
 	}
 
