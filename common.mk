@@ -1,7 +1,7 @@
 PLATFORM 	:= $(shell go env | grep GOHOSTOS | cut -d '"' -f 2)
 ARCH 		:= $(shell go env | grep GOARCH | cut -d '"' -f 2)
 BRANCH		:= $(shell git rev-parse --abbrev-ref HEAD)
-LDFLAGS 	:= -ldflags "-X main.Version $(VERSION) -X main.Name $(NAME)"
+LDFLAGS 	:= -ldflags "-X main.Version=$(VERSION) -X main.Name=$(NAME)"
 
 test:
 	go test ./...
