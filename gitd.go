@@ -61,13 +61,13 @@ func Handler(h http.Handler, opts ...option) http.Handler {
 		opt(handler)
 	}
 
-	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-		handlers := map[*regexp.Regexp]func(http.ResponseWriter, *http.Request, string, string){
-			regexp.MustCompile("(.*?)/git-upload-pack$"):  uploadPack,
-			regexp.MustCompile("(.*?)/git-receive-pack$"): receivePack,
-			regexp.MustCompile("(.*?)/info/refs$"):        infoRefs,
-		}
+	handlers := map[*regexp.Regexp]func(http.ResponseWriter, *http.Request, string, string){
+		regexp.MustCompile("(.*?)/git-upload-pack$"):  uploadPack,
+		regexp.MustCompile("(.*?)/git-receive-pack$"): receivePack,
+		regexp.MustCompile("(.*?)/info/refs$"):        infoRefs,
+	}
 
+	return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		for re, fn := range handlers {
 			if m := re.FindStringSubmatch(req.URL.Path); m != nil {
 				repoPath := m[1]
